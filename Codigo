@@ -1,0 +1,178 @@
+#include <iostream>
+#include <vector>
+#include <chrono>
+#include <random>
+#include <algorithm>
+
+using namespace std;
+using namespace chrono;
+
+// Guardar métricas
+struct Metrics {
+    long long comparisons = 0;
+    long long swaps = 0;
+    double time_ms = 0;
+};
+
+// Função para medir o tempo e contar comparações/trocas
+#define COUNT_COMPARISON metrics.comparisons++
+#define COUNT_SWAP metrics.swaps++
+
+// Algoritmos de ordenação
+void bubbleSort(vector<int> &arr, Metrics &metrics) {
+    int n = arr.size();
+    for (int i = 0; i < n - 1; i++)
+        for (int j = 0; j < n - i - 1; j++) {
+            COUNT_COMPARISON;
+            if (arr[j] > arr[j + 1]) {
+                swap(arr[j], arr[j + 1]);
+                COUNT_SWAP;
+            }
+        }
+}
+
+void insertionSort(vector<int> &arr, Metrics &metrics) {
+    int n = arr.size();
+    for (int i = 1; i < n; i++) {
+        int key = arr[i];
+        int j = i - 1;
+        COUNT_COMPARISON;
+        while (j >= 0 && arr[j] > key) {
+            COUNT_COMPARISON;
+            arr[j + 1] = arr[j];
+            COUNT_SWAP;
+            j--;
+        }
+        arr[j + 1] = key;
+        COUNT_SWAP;
+    }
+}
+
+void selectionSort(vector<int> &arr, Metrics &metrics) {
+    int n = arr.size();
+    for (int i = 0; i < n - 1; i++) {
+        int min_idx = i;
+        for (int j = i + 1; j < n; j++) {
+            COUNT_COMPARISON;
+            if (arr[j] < arr[min_idx]) min_idx = j;
+        }
+        if (min_idx != i) {
+            swap(arr[i], arr[min_idx]);
+            COUNT_SWAP;
+        }
+    }
+}
+
+void merge(vector<int>& arr, int l, int m, int r, Metrics &metrics) {
+    int n1 = m - l + 1;
+    int n2 = r - m;
+    vector<int> L(n1), R(n2);
+    for (int i = 0; i < n1; i++) L[i] = arr[l + i];
+    for (int i = 0; i < n2; i++) R[i] = arr[m + 1 + i];
+    int i = 0, j = 0, k = l;
+    while (i < n1 && j < n2) {
+        COUNT_COMPARISON;
+        if (L[i] <= R[j]) arr[k++] = L[i++];
+        else arr[k++] = R[j++];
+        COUNT_SWAP;
+    }
+    while (i < n1) arr[k++] = L[i++], COUNT_SWAP;
+    while (j < n2) arr[k++] = R[j++], COUNT_SWAP;
+}
+
+void mergeSortUtil(vector<int>& arr, int l, int r, Metrics &metrics) {
+    if (l < r) {
+        int m = l + (r - l) / 2;
+        mergeSortUtil(arr, l, m, metrics);
+        mergeSortUtil(arr, m + 1, r, metrics);
+        merge(arr, l, m, r, metrics);
+    }
+}
+
+void mergeSort(vector<int> &arr, Metrics &metrics) {
+    mergeSortUtil(arr, 0, arr.size() - 1, metrics);
+}
+
+int partition(vector<int>& arr, int low, int high, Metrics &metrics) {
+    int pivot = arr[high], i = low - 1;
+    for (int j = low; j < high; j++) {
+        COUNT_COMPARISON;
+        if (arr[j] < pivot) {
+            swap(arr[++i], arr[j]);
+            COUNT_SWAP;
+        }
+    }
+    swap(arr[i + 1], arr[high]);
+    COUNT_SWAP;
+    return i + 1;
+}
+
+void quickSortUtil(vector<int>& arr, int low, int high, Metrics &metrics) {
+    if (low < high) {
+        int pi = partition(arr, low, high, metrics);
+        quickSortUtil(arr, low, pi - 1, metrics);
+        quickSortUtil(arr, pi + 1, high, metrics);
+    }
+}
+
+void quickSort(vector<int> &arr, Metrics &metrics) {
+    quickSortUtil(arr, 0, arr.size() - 1, metrics);
+}
+
+// Funções para gerar vetores
+vector<int> generateRandomVector(int size) {
+    vector<int> vec(size);
+    mt19937 rng(random_device{}());
+    uniform_int_distribution<int> dist(1, size);
+    for (int& x : vec) x = dist(rng);
+    return vec;
+}
+
+vector<int> generateNearlySortedVector(int size) {
+    vector<int> vec(size);
+    for (int i = 0; i < size; i++) vec[i] = i;
+    for (int i = 0; i < size / 10; i++) swap(vec[rand() % size], vec[rand() % size]);
+    return vec;
+}
+
+vector<int> generateReversedVector(int size) {
+    vector<int> vec(size);
+    for (int i = 0; i < size; i++) vec[i] = size - i;
+    return vec;
+}
+
+// Função para medir e exibir métricas
+void runAndMeasure(string name, void (*sortFunc)(vector<int>&, Metrics&), vector<int> input) {
+    Metrics metrics;
+    auto start = high_resolution_clock::now();
+    sortFunc(input, metrics);
+    auto end = high_resolution_clock::now();
+    metrics.time_ms = duration<double, milli>(end - start).count();
+
+    cout << name << " | Tempo: " << metrics.time_ms << " ms"
+         << " | Comparações: " << metrics.comparisons
+         << " | Trocas: " << metrics.swaps << endl;
+}
+
+int main() {
+    vector<int> sizes = {500, 1000, 2000, 4000, 10000};
+    for (int size : sizes) {
+        cout << "\n--- Vetor com " << size << " elementos ---\n";
+        vector<vector<int>> datasets = {
+            generateRandomVector(size),
+            generateNearlySortedVector(size),
+            generateReversedVector(size)
+        };
+        vector<string> tipos = {"Aleatório", "Quase ordenado", "Invertido"};
+
+        for (int i = 0; i < datasets.size(); i++) {
+            cout << "\nTipo: " << tipos[i] << endl;
+            runAndMeasure("Bubble Sort    ", bubbleSort, datasets[i]);
+            runAndMeasure("Insertion Sort ", insertionSort, datasets[i]);
+            runAndMeasure("Selection Sort ", selectionSort, datasets[i]);
+            runAndMeasure("Merge Sort     ", mergeSort, datasets[i]);
+            runAndMeasure("Quick Sort     ", quickSort, datasets[i]);
+        }
+    }
+    return 0;
+}
